@@ -90,14 +90,14 @@ export default class StartScene extends Phaser.Scene {
             ease: 'Sine.easeInOut'
         });
 
-        // Pressing Enter will start the game
+        // Pressing Enter goes to the player status / mode select screen.
         this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
     }
 
     update() {
-        // When Enter is pressed, switch to the main game scene
+        // When Enter is pressed, switch to the mode select screen first.
         if (Phaser.Input.Keyboard.JustDown(this.enterKey)) {
-            this.scene.start('GameScene');
+            this.scene.start('ModeSelectScene');
         }
     }
 }

@@ -1,4 +1,5 @@
 import StartScene from './scenes/StartScene.js';
+import ModeSelectScene from './scenes/ModeSelectScene.js';
 import GameScene from './scenes/GameScene.js';
 
 const config = {
@@ -17,8 +18,8 @@ const config = {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
     },
-    // StartScene loads first, then GameScene
-    scene: [StartScene, GameScene]
+    // StartScene loads first, then the player goes to the mode/level select screen before gameplay.
+    scene: [StartScene, ModeSelectScene, GameScene]
 };
 
 new Phaser.Game(config);

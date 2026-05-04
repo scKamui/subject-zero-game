@@ -1,9 +1,15 @@
 import createLevel1 from '../levels/level1.js';
+import createLevel2 from '../levels/level2.js';
 export default class GameScene extends Phaser.Scene {
 
     // Basic setup for the game scene
     constructor() {
         super('GameScene');
+    }
+
+    init(data) {
+        data = data || {};
+        this.currentLevel = data.level || 1;
     }
 
     // Load all the images and spritesheets we need for the game
@@ -15,6 +21,16 @@ export default class GameScene extends Phaser.Scene {
         });
 
         this.load.spritesheet('zombie_walk2', 'assets/zombies/zombie_walk2.png', {
+            frameWidth: 128,
+            frameHeight: 128
+        });
+
+        this.load.spritesheet('zombie_walk3', 'assets/zombies/zombie_walk3.png', {
+            frameWidth: 128,
+            frameHeight: 128
+        });
+
+        this.load.spritesheet('zombie_walk4', 'assets/zombies/zombie_walk4.png', {
             frameWidth: 128,
             frameHeight: 128
         });
@@ -52,8 +68,10 @@ export default class GameScene extends Phaser.Scene {
         this.player.body.setSize(20, 14);
         this.player.body.setOffset(54, 90);
 
+        this.levelWidth = this.currentLevel === 2 ? 5000 : 3600;
+
         // Make the level wider than the screen so the camera can scroll sideways
-        this.physics.world.setBounds(0, 0, 3600, 400);
+        this.physics.world.setBounds(0, 0, this.levelWidth, 400);
 
         // Arrow key input
         this.cursors = this.input.keyboard.createCursorKeys();
@@ -71,20 +89,28 @@ export default class GameScene extends Phaser.Scene {
 
         // P key pauses and resumes the game
         this.pauseKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
+        this.quitKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
 
         // R restarts the level, H returns to the home screen, and Enter dismisses the level briefing
         this.restartKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
         this.homeKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.H);
         this.enterKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
+        this.nextLevelKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.N);
 
-        // Keep track of the current level in case more levels are added later
-        this.currentLevel = 1;
+        // Temporary testing shortcut for Assignment 3.
+        // Press T to reset saved rank progress back to Rank 1.
+        this.resetRankKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T);
+
 
         // Player movement speed
         this.playerSpeed = 150;
 
         // Build the current level layout using the separate Level 1 file
-        createLevel1(this);
+        if (this.currentLevel === 2) {
+            createLevel2(this);
+        } else {
+            createLevel1(this);
+        }
         // Let the player collide with the level walls and obstacles from Level 1.
         if (this.labWallGroup) {
             this.physics.add.collider(this.player, this.labWallGroup);
@@ -119,6 +145,20 @@ export default class GameScene extends Phaser.Scene {
             repeat: -1
         });
 
+        this.anims.create({
+            key: 'zombie3_walk',
+            frames: this.anims.generateFrameNumbers('zombie_walk3', { start: 0, end: 9 }),
+            frameRate: 12,
+            repeat: -1
+        });
+
+        this.anims.create({
+            key: 'zombie4_walk',
+            frames: this.anims.generateFrameNumbers('zombie_walk4', { start: 0, end: 9 }),
+            frameRate: 9,
+            repeat: -1
+        });
+
         // Player animations for idle and walking
         this.anims.create({
             key: 'idle',
@@ -134,20 +174,47 @@ export default class GameScene extends Phaser.Scene {
             repeat: -1
         });
 
-        // Place all zombies at the start.
-        // They only begin chasing when the player gets close.
+
+        // Score starts at 0
+        this.score = 0;
+
+        // --- Rank system (Assignment 3) ---
+        // Keeps track of player progression and scaling difficulty
+
+        this.playerRank = 1;           // current rank
+        this.nextRankScore = 1000;     // score needed for next rank
+        this.maxRank = 4;              // max rank cap
+
+        this.baseBulletDamage = 1;     // base damage (increases later)
+        this.rankFireRateBonus = 0;    // reduces delay between shots
+
+        this.zombieHealthMultiplier = 1; // zombies get tougher over time
+        this.zombieSpeedMultiplier = 1;  // zombies get faster over time
+
+        // Load saved rank progress if this player has played before.
+        this.loadProgress();
+        this.bulletDamage = this.baseBulletDamage;
+        this.unlockedLevel = this.unlockedLevel || 1;
+
+        // Place all zombies after rank/difficulty values are set.
+        // This matters because zombie health and speed now use the rank multipliers.
         this.spawnWave('entrance');
         this.spawnWave('armory');
         this.spawnWave('corridor');
         this.spawnWave('testchamber');
         this.spawnWave('final');
 
-        // Score starts at 0
-        this.score = 0;
+        
+        // Only show the score in the HUD.
+        // Use the loaded rank values right away so the briefing screen shows the correct saved progress.
+        const startingPointsNeeded = this.nextRankScore - this.score;
+        let startingHudText = 'Score: 0 | Rank: ' + this.playerRank + ' | Need: ' + startingPointsNeeded;
 
-        // Only show the score in the top HUD.
-        // Pickup messages will show in the middle for a short time.
-        this.uiText = this.add.text(16, 16, 'Score: 0', {
+        if (this.playerRank >= this.maxRank) {
+            startingHudText = 'Score: 0 | Rank: MAX';
+        }
+
+        this.uiText = this.add.text(16, this.scale.height - 70, startingHudText, {
             fontSize: '24px',
             fill: '#ffffff'
         });
@@ -161,7 +228,7 @@ export default class GameScene extends Phaser.Scene {
         this.hearts = [];
 
         for (let i = 0; i < 3; i++) {
-            const heart = this.add.image(30 + i * 32, 58, 'hearts', this.heartFullFrame);
+            const heart = this.add.image(30 + i * 32, this.scale.height - 25, 'hearts', this.heartFullFrame);
             heart.setScrollFactor(0);
             heart.setScale(this.heartVisibleScale);
             heart.setDepth(20);
@@ -299,7 +366,7 @@ export default class GameScene extends Phaser.Scene {
         });
 
         // Base bullet damage for both weapons at the start
-        this.bulletDamage = 1;
+        this.bulletDamage = this.baseBulletDamage;
 
         // Timer for the temporary damage boost
         this.damageBoostTimer = 0;
@@ -315,15 +382,16 @@ export default class GameScene extends Phaser.Scene {
 
         // Keep track of whether the game has ended
         this.gameEnded = false;
+        this.levelCompleted = false;
         this.deathPending = false;
         this.deathEvent = null;
 
         // Make the camera follow the player through the level
-        this.cameras.main.setBounds(0, 0, 3600, 400);
+        this.cameras.main.setBounds(0, 0, this.levelWidth, 400);
         this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
 
         // Pause message shown in the middle of the screen
-        this.pauseText = this.add.text(this.scale.width / 2, 200, 'PAUSED\nPress P to Resume', {
+        this.pauseText = this.add.text(this.scale.width / 2, 200, 'PAUSED\nPress P to Resume\nPress R to Restart\nPress Q for Home', {
             fontSize: '36px',
             fill: '#ffff00',
             align: 'center'
@@ -337,11 +405,18 @@ export default class GameScene extends Phaser.Scene {
         this.pauseText.setVisible(false);
 
         // Win message shown when the player reaches the exit
-        this.winText = this.add.text(this.scale.width / 2, 200, 'YOU ESCAPED!\nPress R to Restart\nPress H for Home', {
-            fontSize: '36px',
-            fill: '#00ff00',
-            align: 'center'
-        }).setOrigin(0.5, 0.5);
+        this.winText = this.add.text(
+            this.scale.width / 2,
+            200,
+            this.currentLevel === 1
+                ? 'LEVEL 1 COMPLETE!\nPress N for Level 2\nPress R to Restart\nPress H for Home'
+                : 'YOU ESCAPED!\nPress R to Restart\nPress H for Home',
+            {
+                fontSize: '36px',
+                fill: '#00ff00',
+                align: 'center'
+            }
+        ).setOrigin(0.5, 0.5);
         this.winText.setFixedSize(this.scale.width, 0);
         this.winText.setAlign('center');
         this.winText.setScrollFactor(0);
@@ -375,7 +450,9 @@ export default class GameScene extends Phaser.Scene {
         this.levelIntroBox.setScrollFactor(0);
         this.levelIntroBox.setDepth(1100);
 
-        this.levelIntroTitle = this.add.text(this.scale.width / 2, 75, 'LEVEL 1 BRIEFING', {
+        const briefingTitle = this.currentLevel === 2 ? 'LEVEL 2 BRIEFING' : 'LEVEL 1 BRIEFING';
+
+        this.levelIntroTitle = this.add.text(this.scale.width / 2, 75, briefingTitle, {
             fontSize: '34px',
             fill: '#ffff66',
             align: 'center'
@@ -383,9 +460,7 @@ export default class GameScene extends Phaser.Scene {
         this.levelIntroTitle.setScrollFactor(0);
         this.levelIntroTitle.setDepth(1101);
 
-        this.levelIntroText = this.add.text(
-            this.scale.width / 2,
-            this.scale.height / 2 + 8,
+        let briefingText =
             'Goal: survive and reach the exit.\n\n' +
             'Move: WASD or Arrow Keys\n' +
             'Aim: Mouse Cursor\n' +
@@ -394,7 +469,24 @@ export default class GameScene extends Phaser.Scene {
             'Damage boosts increase bullet damage briefly.\n\n' +
             'AIM FOR THE HEAD.\n\n' +
             'Beware of tank zombies — they are slow, tough, and deal heavy damage.\n\n' +
-            'Press ENTER when you are ready.',
+            'Press ENTER when you are ready.';
+
+        if (this.currentLevel === 2) {
+            briefingText =
+                'Goal: restore power and reach the exit.\n\n' +
+                'The next sector is longer and the exit is locked.\n' +
+                'Find the power room switch first.\n\n' +
+                'New threat detected: faster infected may appear.\n\n' +
+                'Move: WASD or Arrow Keys\n' +
+                'Aim: Mouse Cursor\n' +
+                'Shoot: Left Click or Spacebar\n\n' +
+                'Press ENTER when you are ready.';
+        }
+
+        this.levelIntroText = this.add.text(
+            this.scale.width / 2,
+            this.scale.height / 2 + 8,
+            briefingText,
             {
                 fontSize: '24px',
                 fill: '#ffffff',
@@ -412,12 +504,16 @@ export default class GameScene extends Phaser.Scene {
     update(time, delta) {
         // If the game is over, allow restart or return to the main menu
         if (this.gameEnded) {
+            if (this.levelCompleted && this.currentLevel === 1 && Phaser.Input.Keyboard.JustDown(this.nextLevelKey)) {
+                this.scene.start('GameScene', { level: 2 });
+                return;
+            }
             if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
                 if (this.deathEvent) {
                     this.deathEvent.remove(false);
                     this.deathEvent = null;
                 }
-                this.scene.restart();
+                this.scene.restart({ level: this.currentLevel });
             }
 
             if (Phaser.Input.Keyboard.JustDown(this.homeKey)) {
@@ -425,7 +521,7 @@ export default class GameScene extends Phaser.Scene {
                     this.deathEvent.remove(false);
                     this.deathEvent = null;
                 }
-                this.scene.start('StartScene');
+                this.scene.start('ModeSelectScene');
             }
 
             return;
@@ -453,9 +549,24 @@ export default class GameScene extends Phaser.Scene {
             this.pauseText.setVisible(this.isPaused);
         }
 
-        // Stop gameplay updates while paused
-        if (this.isPaused) {
-            return;
+            if (this.isPaused) {
+                // Allow restarting from the pause menu
+                if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+                    this.scene.restart({ level: this.currentLevel });
+                }
+
+                // Allow quitting to main menu while paused
+                if (Phaser.Input.Keyboard.JustDown(this.quitKey)) {
+                    this.scene.start('ModeSelectScene');
+                }
+
+                return;
+            }
+
+        // Temporary testing shortcut: press T to reset saved rank progress.
+        // This helps test localStorage without manually clearing browser data.
+        if (Phaser.Input.Keyboard.JustDown(this.resetRankKey)) {
+            this.resetProgress();
         }
 
         // Keep the aim position updated using world coordinates.
@@ -524,10 +635,11 @@ export default class GameScene extends Phaser.Scene {
         }
 
         // Change fire rate based on the current weapon
+        // Fire rate gets faster as rank increases
         if (this.currentWeapon === 'pistol') {
-            this.fireRate = 250;
+            this.fireRate = Math.max(120, 250 - this.rankFireRateBonus);
         } else if (this.currentWeapon === 'ar') {
-            this.fireRate = 100;
+            this.fireRate = Math.max(60, 100 - this.rankFireRateBonus);
         }
 
         // Shooting works differently depending on the weapon.
@@ -554,7 +666,7 @@ export default class GameScene extends Phaser.Scene {
             bullet.y += bullet.velocityY * (delta / 1000);
 
             // Remove bullets that go off-screen to prevent buildup
-            if (bullet.x < -50 || bullet.x > 3650 || bullet.y < -50 || bullet.y > 450) {
+            if (bullet.x < -50 || bullet.x > this.levelWidth + 50 || bullet.y < -50 || bullet.y > 450) {
                 bullet.destroy();
                 this.bullets.splice(i, 1);
                 continue;
@@ -622,8 +734,9 @@ export default class GameScene extends Phaser.Scene {
                         zombie.destroy();
                         this.zombies.splice(j, 1);
 
-                        // Add to the score when a zombie is defeated
-                        this.score += 10;
+                        // Add score based on zombie type, then check if the player should rank up.
+                        this.score += zombie.scoreValue || 50;
+                        this.checkRankUp();
                     }
 
                     // Stop after the first zombie hit
@@ -652,7 +765,7 @@ export default class GameScene extends Phaser.Scene {
             this.damageBoostActive = true;
 
             if (this.damageBoostTimer <= 0) {
-                this.bulletDamage = 1;
+                this.bulletDamage = this.baseBulletDamage;
                 this.damageBoostTimer = 0;
                 this.damageBoostActive = false;
                 this.showPickupMessage('Boost Off');
@@ -671,8 +784,17 @@ export default class GameScene extends Phaser.Scene {
             }
         }
 
-        // Only show the score in the top HUD
-        this.uiText.setText('Score: ' + this.score);
+        // Show score, current rank, and how many more points are needed for the next rank.
+        const pointsNeeded = this.nextRankScore - this.score;
+        if (this.playerRank < this.maxRank) {
+            this.uiText.setText(
+                'Score: ' + this.score +
+                ' | Rank: ' + this.playerRank +
+                ' | Need: ' + pointsNeeded
+            );
+        } else {
+            this.uiText.setText('Score: ' + this.score + ' | Rank: MAX');
+        }
 
         // Update the heart display - each heart shows 35 health points
         const heartsRemaining = Math.ceil(this.playerHealth / 35);
@@ -744,13 +866,37 @@ export default class GameScene extends Phaser.Scene {
 
             if (Phaser.Geom.Intersects.RectangleToRectangle(this.player.getBounds(), damagePickupBox)) {
                 // Increase bullet damage for a short time
-                this.bulletDamage = 2;
+                this.bulletDamage = this.baseBulletDamage + 1;
                 this.damageBoostTimer = 6000; // 6 seconds
                 this.showPickupMessage('Boost On');
 
                 // Remove the pickup after collecting it
                 this.damagePickup.destroy();
                 this.damagePickup = null;
+            }
+        }
+
+        // Check if the player activates the Level 2 power switch.
+        // The Level 2 exit stays locked until the power is restored.
+        if (this.powerSwitch && !this.powerRestored) {
+            const powerBox = new Phaser.Geom.Rectangle(
+                this.powerSwitch.x - 10,
+                this.powerSwitch.y - 10,
+                20,
+                20
+            );
+
+            if (Phaser.Geom.Intersects.RectangleToRectangle(this.player.getBounds(), powerBox)) {
+                this.powerRestored = true;
+                this.powerSwitch.destroy();
+                this.powerSwitch = null;
+
+                if (this.powerSwitchLabel) {
+                    this.powerSwitchLabel.destroy();
+                    this.powerSwitchLabel = null;
+                }
+
+                this.showPickupMessage('Power Restored!\nExit unlocked');
             }
         }
 
@@ -765,8 +911,12 @@ export default class GameScene extends Phaser.Scene {
             );
 
             if (Phaser.Geom.Intersects.RectangleToRectangle(playerCenterBox, this.exitZone.getBounds())) {
-                this.winGame();
-                return;
+                if (this.currentLevel === 2 && !this.powerRestored) {
+                    this.showPickupMessage('Exit locked\nRestore power first');
+                } else {
+                    this.winGame();
+                    return;
+                }
             }
         }
 
@@ -887,7 +1037,16 @@ export default class GameScene extends Phaser.Scene {
                         // Check if the player's health has reached zero
                         if (this.playerHealth <= 0) {
                             this.playerHealth = 0;
-                            this.uiText.setText('Score: ' + this.score);
+                            const pointsNeededOnDeath = this.nextRankScore - this.score;
+                            if (this.playerRank < this.maxRank) {
+                                this.uiText.setText(
+                                    'Score: ' + this.score +
+                                    ' | Rank: ' + this.playerRank +
+                                    ' | Need: ' + pointsNeededOnDeath
+                                );
+                            } else {
+                                this.uiText.setText('Score: ' + this.score + ' | Rank: MAX');
+                            }
 
                             // Stop player movement right away
                             this.player.body.setVelocity(0, 0);
@@ -918,7 +1077,7 @@ export default class GameScene extends Phaser.Scene {
             }
 
             // Remove zombies if they somehow go too far outside the level
-            if (zombie.x < -100 || zombie.x > 3700) {
+            if (zombie.x < -100 || zombie.x > this.levelWidth + 100) {
                 zombie.destroy();
                 this.zombies.splice(i, 1);
             }
@@ -981,41 +1140,65 @@ export default class GameScene extends Phaser.Scene {
         this.bullets.push(bullet);
     }
 
-    // Create a zombie at the given position, with option for big tank zombie
-    spawnZombieAt(spawnX, spawnY, isBigZombie = false) {
+    // Create a zombie at the given position, with option for type (normal, tank, runner, brute)
+    spawnZombieAt(spawnX, spawnY, zombieType = 'normal') {
         let zombie;
 
-        // Use different visuals so the player can tell zombie types apart
-        let zombieKey;
-        let zombieAnim;
+        // Older spawn calls used true/false, so keep those working while adding named zombie types.
+        if (zombieType === true) {
+            zombieType = 'tank';
+        } else if (zombieType === false) {
+            zombieType = 'normal';
+        }
 
-        if (isBigZombie) {
-            // Tank zombie
+        // Set default zombie stats first. These are used for normal zombies.
+        let zombieKey = 'zombie_walk1';
+        let zombieAnim = 'zombie1_walk';
+        let baseHealth = 2;
+        let baseSpeed = this.zombieSpeed;
+        let scoreValue = 50;
+        let zombieScale = 0.9;
+        let isTankZombie = false;
+
+        // Tank zombie: slower, tougher, and worth more points.
+        if (zombieType === 'tank') {
             zombieKey = 'zombie_walk2';
             zombieAnim = 'zombie2_walk';
-        } else {
-            // Normal zombie
-            zombieKey = 'zombie_walk1';
-            zombieAnim = 'zombie1_walk';
+            baseHealth = 5;
+            baseSpeed = 35;
+            scoreValue = 100;
+            isTankZombie = true;
         }
 
-        if (isBigZombie) {
-            // Create a bigger zombie that moves slower
-            zombie = this.add.sprite(spawnX, spawnY, zombieKey);
-            zombie.setScale(0.9); 
-            zombie.setDepth(10);
-            zombie.health = 5;
-            zombie.speed = 35;
-            zombie.isTankZombie = true; // used later so tank damage is handled separately
-        } else {
-            // Create a normal zombie
-            zombie = this.add.sprite(spawnX, spawnY, zombieKey);
-            zombie.setScale(0.9); // Slightly smaller zombie size for better fit
-            zombie.setDepth(10);
-            zombie.health = 1;
-            zombie.speed = this.zombieSpeed;
-            zombie.isTankZombie = false; // used later so normal zombies only remove one heart
+        // Runner zombie: faster zombie for later levels.
+        if (zombieType === 'runner') {
+            zombieKey = 'zombie_walk3';
+            zombieAnim = 'zombie3_walk';
+            baseHealth = 2;
+            baseSpeed = 125;
+            scoreValue = 75;
+            zombieScale = 0.82;
         }
+
+        // Brute zombie: stronger level 3 style enemy.
+        if (zombieType === 'brute') {
+            zombieKey = 'zombie_walk4';
+            zombieAnim = 'zombie4_walk';
+            baseHealth = 7;
+            baseSpeed = 55;
+            scoreValue = 150;
+            zombieScale = 0.95;
+            isTankZombie = true;
+        }
+
+        zombie = this.add.sprite(spawnX, spawnY, zombieKey);
+        zombie.setScale(zombieScale);
+        zombie.setDepth(10);
+        zombie.zombieType = zombieType;
+        zombie.health = Math.ceil(baseHealth * this.zombieHealthMultiplier);
+        zombie.speed = baseSpeed * this.zombieSpeedMultiplier;
+        zombie.scoreValue = scoreValue;
+        zombie.isTankZombie = isTankZombie;
 
         // Anti-stuck values to help zombies move around obstacles
         zombie.stuckTime = 0;
@@ -1078,6 +1261,14 @@ export default class GameScene extends Phaser.Scene {
             this.spawnZombieAt(1350, 200, false);
             this.spawnZombieAt(1450, 260, false);
             this.spawnZombieAt(1600, 180, false);
+
+            // Extra Level 2 pressure in the longer corridor.
+            // Runners start showing up in Level 2 to make this level feel different.
+            if (this.currentLevel === 2) {
+                this.spawnZombieAt(1680, 130, 'runner');
+                this.spawnZombieAt(1780, 280, false);
+                this.spawnZombieAt(1880, 190, 'runner');
+            }
         }
 
         if (sectionName === 'testchamber') {
@@ -1092,6 +1283,15 @@ export default class GameScene extends Phaser.Scene {
             this.spawnZombieAt(2400, 220, false);
             this.spawnZombieAt(1950, 170, false);
             this.spawnZombieAt(2450, 180, true);
+
+            // Extra Level 2 enemies before the power room.
+            // This makes the player fight harder before reaching the objective.
+            if (this.currentLevel === 2) {
+                this.spawnZombieAt(2550, 130, 'runner');
+                this.spawnZombieAt(2680, 280, false);
+                this.spawnZombieAt(2820, 180, true);
+                this.spawnZombieAt(2950, 240, 'runner');
+            }
         }
 
         if (sectionName === 'final') {
@@ -1106,6 +1306,19 @@ export default class GameScene extends Phaser.Scene {
             this.spawnZombieAt(3000, 260, false);
             this.spawnZombieAt(3180, 200, false);
             this.spawnZombieAt(3420, 220, true);
+
+            // Extra Level 2 enemies after the power switch.
+            // This makes the unlocked exit route feel like a final push instead of empty space.
+            if (this.currentLevel === 2) {
+                this.spawnZombieAt(3500, 150, 'runner');
+                this.spawnZombieAt(3620, 260, false);
+                this.spawnZombieAt(3720, 130, 'runner');
+                this.spawnZombieAt(3840, 280, 'runner');
+                this.spawnZombieAt(3980, 170, false);
+                this.spawnZombieAt(4100, 260, 'runner');
+                this.spawnZombieAt(4200, 180, true);
+                this.spawnZombieAt(4300, 280, 'runner');
+            }
         }
     }
 
@@ -1141,6 +1354,7 @@ export default class GameScene extends Phaser.Scene {
         // Stop gameplay and show the win message
         this.isPaused = true;
         this.gameEnded = true;
+        this.levelCompleted = true;
         if (this.deathEvent) {
             this.deathEvent.remove(false);
             this.deathEvent = null;
@@ -1156,7 +1370,101 @@ export default class GameScene extends Phaser.Scene {
             this.gameOverText.setVisible(false);
         }
 
+        if (this.currentLevel === 1 && this.unlockedLevel < 2) {
+            this.unlockedLevel = 2;
+            this.saveProgress();
+        }
+
+        // Set the win text when the player actually finishes the level
+        if (this.currentLevel === 1) {
+            this.winText.setText('LEVEL 1 COMPLETE!\nPress N for Level 2\nPress R to Restart\nPress H for Home');
+        } else {
+            this.winText.setText('YOU ESCAPED!\nPress R to Restart\nPress H for Home');
+        }
+
         this.winText.setVisible(true);
+    }
+
+    // Checks if the player has enough score to rank up.
+    // Every rank makes the player stronger and also makes zombies harder.
+    checkRankUp() {
+        while (this.score >= this.nextRankScore && this.playerRank < this.maxRank) {
+            this.playerRank++;
+            this.nextRankScore += 1000;
+
+            this.rankFireRateBonus += 20;
+            this.zombieHealthMultiplier += 0.5;
+            this.zombieSpeedMultiplier += 0.08;
+
+            if (this.playerRank >= 3) {
+                this.baseBulletDamage = 2;
+
+                if (!this.damageBoostActive) {
+                    this.bulletDamage = this.baseBulletDamage;
+                }
+            }
+
+            let unlockMessage = 'Faster shooting unlocked';
+
+            if (this.playerRank >= 3) {
+                unlockMessage = 'Damage increase unlocked';
+            }
+
+            this.showPickupMessage('RANK UP!\nRank ' + this.playerRank + '\n' + unlockMessage);
+            this.cameras.main.shake(180, 0.004);
+
+            this.saveProgress();
+        }
+    }
+
+    // Saves the player's rank progress in the browser.
+    saveProgress() {
+        const progress = {
+            playerRank: this.playerRank,
+            nextRankScore: this.nextRankScore,
+            baseBulletDamage: this.baseBulletDamage,
+            rankFireRateBonus: this.rankFireRateBonus,
+            zombieHealthMultiplier: this.zombieHealthMultiplier,
+            zombieSpeedMultiplier: this.zombieSpeedMultiplier,
+            unlockedLevel: this.unlockedLevel || 1
+        };
+
+        localStorage.setItem('subjectZeroProgress', JSON.stringify(progress));
+    }
+
+    // Loads saved rank progress from the browser if it exists.
+    loadProgress() {
+        const savedProgress = localStorage.getItem('subjectZeroProgress');
+
+        if (savedProgress) {
+            const progress = JSON.parse(savedProgress);
+
+            this.playerRank = progress.playerRank || 1;
+            this.nextRankScore = progress.nextRankScore || 1000;
+            this.baseBulletDamage = progress.baseBulletDamage || 1;
+            this.rankFireRateBonus = progress.rankFireRateBonus || 0;
+            this.zombieHealthMultiplier = progress.zombieHealthMultiplier || 1;
+            this.zombieSpeedMultiplier = progress.zombieSpeedMultiplier || 1;
+            this.unlockedLevel = progress.unlockedLevel || 1;
+        }
+    }
+
+    // Resets saved rank progress for testing.
+    // This clears localStorage and puts the player back to the starting rank values.
+    resetProgress() {
+        localStorage.removeItem('subjectZeroProgress');
+
+        this.playerRank = 1;
+        this.nextRankScore = 1000;
+        this.baseBulletDamage = 1;
+        this.rankFireRateBonus = 0;
+        this.zombieHealthMultiplier = 1;
+        this.zombieSpeedMultiplier = 1;
+        this.unlockedLevel = 1;
+        this.bulletDamage = this.baseBulletDamage;
+        this.saveProgress();
+
+        this.showPickupMessage('Rank progress reset\nBack to Rank 1');
     }
 
     // Display a temporary message in the middle of the screen for pickups/status
