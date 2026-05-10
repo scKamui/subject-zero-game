@@ -134,17 +134,40 @@ export default function createLevel2(scene) {
     createSolidObject(3500, 260, 100, 60, 0x3f8fe6, -1);
     createSolidObject(3380, 235, 80, 80, 0x58616c, -1);
 
-    // Level 2 objective: the player must activate this power switch before escaping.
+    // Level 2 objective: the player must activate this power console before escaping.
+    // This uses a console body, screen, warning light, and small interaction zone so it looks less like a pickup square.
     scene.powerRestored = false;
-    scene.powerSwitch = scene.add.rectangle(3350, 105, 28, 28, 0xffdd33);
-    scene.powerSwitch.setDepth(12);
-    scene.powerSwitch.setStrokeStyle(3, 0x000000);
 
-    scene.powerSwitchLabel = scene.add.text(3310, 62, 'Power Switch', {
-        fontSize: '16px',
+    // Soft glow around the power console so the objective stands out.
+    scene.powerSwitchGlow = scene.add.circle(3400, 120, 32, 0xffdd33, 0.12);
+    scene.powerSwitchGlow.setDepth(11);
+
+    // Main console body.
+    scene.powerSwitchBase = scene.add.rectangle(3400, 127, 62, 44, 0x1c222b);
+    scene.powerSwitchBase.setDepth(12);
+    scene.powerSwitchBase.setStrokeStyle(2, 0x6f7f92);
+
+    // Yellow screen/activation panel. GameScene uses this object for the pickup/activation check.
+    scene.powerSwitch = scene.add.rectangle(3400, 119, 36, 18, 0xffdd33);
+    scene.powerSwitch.setDepth(13);
+    scene.powerSwitch.setStrokeStyle(2, 0x000000);
+
+    // Small red warning light to make the console look powered down.
+    scene.powerSwitchLight = scene.add.circle(3423, 137, 4, 0xff3333, 1);
+    scene.powerSwitchLight.setDepth(14);
+    scene.powerSwitchLight.setStrokeStyle(1, 0x000000);
+
+    // Small lever/detail on the console.
+    scene.powerSwitchLever = scene.add.rectangle(3381, 137, 6, 16, 0x9aa6b2);
+    scene.powerSwitchLever.setDepth(14);
+    scene.powerSwitchLever.setStrokeStyle(1, 0x000000);
+    scene.powerSwitchLever.setAngle(-20);
+
+    scene.powerSwitchLabel = scene.add.text(3345, 72, 'Power Console', {
+        fontSize: '15px',
         fill: '#ffdd33'
     });
-    scene.powerSwitchLabel.setDepth(12);
+    scene.powerSwitchLabel.setDepth(14);
 
     // Pickups in the level
     // AR pickup placed earlier in the level

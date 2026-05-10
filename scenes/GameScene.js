@@ -1,5 +1,6 @@
 import createLevel1 from '../levels/level1.js';
 import createLevel2 from '../levels/level2.js';
+import createLevel3 from '../levels/level3.js';
 export default class GameScene extends Phaser.Scene {
 
     // Basic setup for the game scene
@@ -54,6 +55,8 @@ export default class GameScene extends Phaser.Scene {
         this.load.image('akPickup', 'assets/pickups/ak.png');
 
         this.load.image('damageBoostPickup', 'assets/pickups/dmgboost.png');
+        this.load.image('shotgunPickup', 'assets/pickups/shotgunPickup.png');
+        this.load.image('armorPickup', 'assets/pickups/armorPickup.png');
     }
 
     // Set up the game world, player, zombies, controls, and UI
@@ -68,7 +71,13 @@ export default class GameScene extends Phaser.Scene {
         this.player.body.setSize(20, 14);
         this.player.body.setOffset(54, 90);
 
-        this.levelWidth = this.currentLevel === 2 ? 5000 : 3600;
+        if (this.currentLevel === 3) {
+            this.levelWidth = 6000;
+        } else if (this.currentLevel === 2) {
+            this.levelWidth = 5000;
+        } else {
+            this.levelWidth = 3600;
+        }
 
         // Make the level wider than the screen so the camera can scroll sideways
         this.physics.world.setBounds(0, 0, this.levelWidth, 400);
@@ -106,11 +115,14 @@ export default class GameScene extends Phaser.Scene {
         this.playerSpeed = 150;
 
         // Build the current level layout using the separate Level 1 file
-        if (this.currentLevel === 2) {
+        if (this.currentLevel === 3) {
+            createLevel3(this);
+        } else if (this.currentLevel === 2) {
             createLevel2(this);
         } else {
             createLevel1(this);
         }
+        
         // Let the player collide with the level walls and obstacles from Level 1.
         if (this.labWallGroup) {
             this.physics.add.collider(this.player, this.labWallGroup);
@@ -123,6 +135,8 @@ export default class GameScene extends Phaser.Scene {
 
         // Store bullets in a normal array for now
         this.bullets = [];
+        this.enemyProjectiles = [];
+        this.randomPickups = [];
 
         // Store zombies in an array
         this.zombies = [];
@@ -204,6 +218,20 @@ export default class GameScene extends Phaser.Scene {
         this.spawnWave('testchamber');
         this.spawnWave('final');
 
+        // Level 3 objective setup.
+        // The player must hold both terminal areas before the exit unlocks.
+        this.terminalHoldRequired = 10000; // 10 seconds per terminal
+        this.terminalAProgress = 0;
+        this.terminalBProgress = 0;
+        this.terminalAActivated = false;
+        this.terminalBActivated = false;
+        this.level3ExitUnlocked = this.currentLevel !== 3;
+
+        // Level 3 holdout spawn flags.
+        // These make sure each terminal only triggers its defense wave once.
+        this.terminalASpawnedDefense = false;
+        this.terminalBSpawnedDefense = false;
+
         
         // Only show the score in the HUD.
         // Use the loaded rank values right away so the briefing screen shows the correct saved progress.
@@ -251,53 +279,65 @@ export default class GameScene extends Phaser.Scene {
         this.playerHealth = 105;
 
         // Replace the placeholder health pickup with a heart image.
-        // Keep the same position and pickup behavior.
+        // Level 1 keeps its guaranteed health pickup.
+        // Level 2 and Level 3 use randomized pickups instead.
         if (this.healthPickup) {
             const pickupX = this.healthPickup.x;
             const pickupY = this.healthPickup.y;
             this.healthPickup.destroy();
-            this.healthPickup = this.add.image(pickupX, pickupY, 'hearts', this.heartFullFrame);
-            this.healthPickup.setScale(2.2);
-            this.healthPickup.setDepth(10);
 
-            this.tweens.add({
-                targets: this.healthPickup,
-                y: pickupY - 8,
-                duration: 800,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
+            if (this.currentLevel === 1) {
+                this.healthPickup = this.add.image(pickupX, pickupY, 'hearts', this.heartFullFrame);
+                this.healthPickup.setScale(2.2);
+                this.healthPickup.setDepth(10);
+
+                this.tweens.add({
+                    targets: this.healthPickup,
+                    y: pickupY - 8,
+                    duration: 800,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut'
+                });
+            } else {
+                this.healthPickup = null;
+            }
         }
 
         // Replace the placeholder damage boost pickup with the PNG version.
-        // Keep the same position and pickup behavior.
+        // Level 1 keeps its guaranteed damage boost pickup.
+        // Level 2 and Level 3 use randomized pickups instead.
         if (this.damagePickup) {
             const pickupX = this.damagePickup.x;
             const pickupY = this.damagePickup.y;
             this.damagePickup.destroy();
-            this.damagePickup = this.add.image(pickupX, pickupY, 'damageBoostPickup');
-            this.damagePickup.setScale(0.02);
-            this.damagePickup.setDepth(5);
-            this.damagePickup.setAngle(20);
 
-            this.tweens.add({
-                targets: this.damagePickup,
-                y: pickupY - 8,
-                duration: 800,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
+            if (this.currentLevel === 1) {
+                this.damagePickup = this.add.image(pickupX, pickupY, 'damageBoostPickup');
+                this.damagePickup.setScale(0.02);
+                this.damagePickup.setDepth(5);
+                this.damagePickup.setAngle(20);
 
-            this.tweens.add({
-                targets: this.damagePickup,
-                scale: 0.025,
-                duration: 500,
-                yoyo: true,
-                repeat: -1,
-                ease: 'Sine.easeInOut'
-            });
+                this.tweens.add({
+                    targets: this.damagePickup,
+                    y: pickupY - 8,
+                    duration: 800,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut'
+                });
+
+                this.tweens.add({
+                    targets: this.damagePickup,
+                    scale: 0.025,
+                    duration: 500,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: 'Sine.easeInOut'
+                });
+            } else {
+                this.damagePickup = null;
+            }
         }
 
         // Damage cooldown so the player does not take damage every frame
@@ -327,6 +367,12 @@ export default class GameScene extends Phaser.Scene {
                 ease: 'Sine.easeInOut'
             });
         }
+
+        // Randomize non-AR pickups in Level 2 and Level 3.
+        // The AR stays guaranteed because it is important for later levels.
+        if (this.currentLevel === 2 || this.currentLevel === 3) {
+            this.spawnRandomPickupsForLevel();
+        }
         
         // Player starts with the pistol weapon.
         this.currentWeapon = 'pistol';
@@ -342,7 +388,12 @@ export default class GameScene extends Phaser.Scene {
                 this.mouseWorldY = pointer.worldY;
 
                 if (!this.levelIntroActive && !this.isPaused && !this.gameEnded && this.time.now > this.lastFired) {
-                    this.shootBullet();
+                    if (this.currentWeapon === 'shotgun') {
+                        this.shootShotgun();
+                    } else {
+                        this.shootBullet();
+                    }
+
                     this.lastFired = this.time.now + this.fireRate;
                 }
             }
@@ -373,6 +424,15 @@ export default class GameScene extends Phaser.Scene {
 
         // Keep track of whether the damage boost is active
         this.damageBoostActive = false;
+
+        // Armor pickup state.
+        // When this is true, the next zombie/spitter hit will be blocked.
+        this.hasArmor = false;
+
+        // Shotgun pickup state.
+        // The shotgun is temporary, so this timer counts down after pickup.
+        this.shotgunTimer = 0;
+        this.previousWeaponBeforeShotgun = null;
 
         // Timer for pickup/status text shown in the middle of the screen
         this.pickupMessageTimer = 0;
@@ -450,7 +510,13 @@ export default class GameScene extends Phaser.Scene {
         this.levelIntroBox.setScrollFactor(0);
         this.levelIntroBox.setDepth(1100);
 
-        const briefingTitle = this.currentLevel === 2 ? 'LEVEL 2 BRIEFING' : 'LEVEL 1 BRIEFING';
+        let briefingTitle = 'LEVEL 1 BRIEFING';
+
+        if (this.currentLevel === 2) {
+            briefingTitle = 'LEVEL 2 BRIEFING';
+        } else if (this.currentLevel === 3) {
+            briefingTitle = 'LEVEL 3 BRIEFING';
+        }
 
         this.levelIntroTitle = this.add.text(this.scale.width / 2, 75, briefingTitle, {
             fontSize: '34px',
@@ -483,6 +549,16 @@ export default class GameScene extends Phaser.Scene {
                 'Press ENTER when you are ready.';
         }
 
+        if (this.currentLevel === 3) {
+            briefingText =
+                'Goal: activate both terminals and reach the exit.\n\n' +
+                'Stand inside each terminal area to upload the override.\n' +
+                'Leaving the area pauses the upload, so hold your ground.\n\n' +
+                'New threat detected: spitter infected can attack from range.\n\n' +
+                'Activate Terminal A and Terminal B to unlock the exit.\n\n' +
+                'Press ENTER when you are ready.';
+        }
+
         this.levelIntroText = this.add.text(
             this.scale.width / 2,
             this.scale.height / 2 + 8,
@@ -504,10 +580,18 @@ export default class GameScene extends Phaser.Scene {
     update(time, delta) {
         // If the game is over, allow restart or return to the main menu
         if (this.gameEnded) {
+            // Level 1 -> Level 2
             if (this.levelCompleted && this.currentLevel === 1 && Phaser.Input.Keyboard.JustDown(this.nextLevelKey)) {
                 this.scene.start('GameScene', { level: 2 });
                 return;
             }
+
+            // Level 2 -> Level 3
+            if (this.levelCompleted && this.currentLevel === 2 && Phaser.Input.Keyboard.JustDown(this.nextLevelKey)) {
+                this.scene.start('GameScene', { level: 3 });
+                return;
+            }
+
             if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
                 if (this.deathEvent) {
                     this.deathEvent.remove(false);
@@ -640,6 +724,9 @@ export default class GameScene extends Phaser.Scene {
             this.fireRate = Math.max(120, 250 - this.rankFireRateBonus);
         } else if (this.currentWeapon === 'ar') {
             this.fireRate = Math.max(60, 100 - this.rankFireRateBonus);
+        } else if (this.currentWeapon === 'shotgun') {
+            // Shotgun fires slower because it shoots multiple pellets at once.
+            this.fireRate = 450;
         }
 
         // Shooting works differently depending on the weapon.
@@ -650,9 +737,16 @@ export default class GameScene extends Phaser.Scene {
                 this.lastFired = time + this.fireRate;
             }
         } else if (this.currentWeapon === 'ar') {
-            // AR keeps firing while spacebar or the mouse button is held
+            // AR keeps firing while spacebar or the mouse button is held.
             if ((this.shootKey.isDown || this.input.activePointer.isDown) && time > this.lastFired) {
                 this.shootBullet();
+                this.lastFired = time + this.fireRate;
+            }
+        } else if (this.currentWeapon === 'shotgun') {
+            // Shotgun now fires continuously while holding shoot.
+            // It still shoots slower than the AR because each shot fires multiple pellets.
+            if ((this.shootKey.isDown || this.input.activePointer.isDown) && time > this.lastFired) {
+                this.shootShotgun();
                 this.lastFired = time + this.fireRate;
             }
         }
@@ -750,13 +844,70 @@ export default class GameScene extends Phaser.Scene {
             }
         }
 
+        // Move enemy spit projectiles and check if they hit the player.
+        for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
+            const spit = this.enemyProjectiles[i];
+
+            spit.x += spit.velocityX * (delta / 1000);
+            spit.y += spit.velocityY * (delta / 1000);
+
+            if (spit.x < -50 || spit.x > this.levelWidth + 50 || spit.y < -50 || spit.y > 450) {
+                spit.destroy();
+                this.enemyProjectiles.splice(i, 1);
+                continue;
+            }
+
+            // Use a much smaller hitbox for spit projectiles so they feel fairer.
+            // The player now has to be hit more directly instead of taking splash-like damage.
+            const playerSpitHitbox = new Phaser.Geom.Rectangle(
+                this.player.x - 10,
+                this.player.y - 12,
+                20,
+                24
+            );
+
+            if (Phaser.Geom.Intersects.RectangleToRectangle(spit.getBounds(), playerSpitHitbox)) {
+                spit.destroy();
+                this.enemyProjectiles.splice(i, 1);
+
+                if (time > this.lastHitTime) {
+                    // Armor blocks one spitter hit before health is reduced.
+                    if (this.hasArmor) {
+                        this.hasArmor = false;
+                        this.player.clearTint();
+                        this.showPickupMessage('Armor absorbed hit');
+                        this.lastHitTime = time + this.hitCooldown;
+                        continue;
+                    }
+
+                    this.playerHealth -= 35;
+                    this.lastHitTime = time + this.hitCooldown;
+                    this.playerHitTimer = 200;
+                    this.player.setTint(0xff0000);
+                    this.cameras.main.shake(100, 0.003);
+
+                    if (this.playerHealth <= 0) {
+                        this.playerHealth = 0;
+                        this.player.body.setVelocity(0, 0);
+                        this.deathPending = true;
+                        this.gameOver();
+                        return;
+                    }
+                }
+            }
+        }
+
         // Keep the player red for a brief moment after taking damage
         if (this.playerHitTimer > 0) {
             this.playerHitTimer -= delta;
             this.player.setTint(0xff0000);
         } else {
-            // Return the player to normal color after the hit flash ends
-            this.player.clearTint();
+            // Return to normal after hit flash, unless armor is active.
+            if (this.hasArmor) {
+                this.player.setTint(0xaaddff);
+            } else {
+                this.player.clearTint();
+            }
         }
 
         // Count down the damage boost timer and reset damage when it ends
@@ -772,6 +923,19 @@ export default class GameScene extends Phaser.Scene {
             }
         } else {
             this.damageBoostActive = false;
+        }
+
+        // Count down the temporary shotgun pickup.
+        // When the timer ends, switch back to the previous weapon.
+        if (this.shotgunTimer > 0) {
+            this.shotgunTimer -= delta;
+
+            if (this.shotgunTimer <= 0) {
+                this.shotgunTimer = 0;
+                this.currentWeapon = this.previousWeaponBeforeShotgun || 'pistol';
+                this.previousWeaponBeforeShotgun = null;
+                this.showPickupMessage('Shotgun expired');
+            }
         }
 
         // Hide pickup/status text after about 2 seconds
@@ -876,6 +1040,29 @@ export default class GameScene extends Phaser.Scene {
             }
         }
 
+        // Check randomized pickups for Level 2 and Level 3.
+        // These pickups can be health, damage boost, shotgun, or armor.
+        for (let i = this.randomPickups.length - 1; i >= 0; i--) {
+            const pickup = this.randomPickups[i];
+
+            if (!pickup || !pickup.active) {
+                this.randomPickups.splice(i, 1);
+                continue;
+            }
+
+            const pickupBox = new Phaser.Geom.Rectangle(
+                pickup.x - 14,
+                pickup.y - 14,
+                28,
+                28
+            );
+
+            if (Phaser.Geom.Intersects.RectangleToRectangle(this.player.getBounds(), pickupBox)) {
+                this.collectRandomPickup(pickup);
+                this.randomPickups.splice(i, 1);
+            }
+        }
+
         // Check if the player activates the Level 2 power switch.
         // The Level 2 exit stays locked until the power is restored.
         if (this.powerSwitch && !this.powerRestored) {
@@ -900,6 +1087,11 @@ export default class GameScene extends Phaser.Scene {
             }
         }
 
+        // Level 3 terminal objective
+        if (this.currentLevel === 3) {
+            this.updateTerminalObjective(delta);
+        }
+
         // Check if the player reaches the exit and wins.
         // Use a smaller center box so the level only ends when the visible player is really inside it.
         if (this.exitZone) {
@@ -913,6 +1105,8 @@ export default class GameScene extends Phaser.Scene {
             if (Phaser.Geom.Intersects.RectangleToRectangle(playerCenterBox, this.exitZone.getBounds())) {
                 if (this.currentLevel === 2 && !this.powerRestored) {
                     this.showPickupMessage('Exit locked\nRestore power first');
+                } else if (this.currentLevel === 3 && !this.level3ExitUnlocked) {
+                    this.showPickupMessage('Exit locked\nActivate both terminals');
                 } else {
                     this.winGame();
                     return;
@@ -945,10 +1139,26 @@ export default class GameScene extends Phaser.Scene {
             let velocityX = 0;
             let velocityY = 0;
 
-            // Only chase once activated
+            // Only move once activated.
+            // Spitters keep distance and shoot instead of rushing the player.
             if (zombie.activeChase && distance > 0) {
-                velocityX = (dx / distance) * zombie.speed;
-                velocityY = (dy / distance) * zombie.speed;
+                if (zombie.isSpitter) {
+                    if (distance > zombie.preferredDistance + 80) {
+                        velocityX = (dx / distance) * zombie.speed;
+                        velocityY = (dy / distance) * zombie.speed;
+                    } else if (distance < zombie.preferredDistance - 60) {
+                        velocityX = -(dx / distance) * zombie.speed;
+                        velocityY = -(dy / distance) * zombie.speed;
+                    }
+
+                    if (time > zombie.lastSpitTime + zombie.spitCooldown) {
+                        this.shootSpit(zombie);
+                        zombie.lastSpitTime = time;
+                    }
+                } else {
+                    velocityX = (dx / distance) * zombie.speed;
+                    velocityY = (dy / distance) * zombie.speed;
+                }
             }
 
             // If zombie gets stuck on obstacles, make it move vertically to get unstuck
@@ -1002,6 +1212,15 @@ export default class GameScene extends Phaser.Scene {
                 if (dist < 60) {
                     // Only apply damage if the hit cooldown has passed
                     if (time > this.lastHitTime) {
+                        // Armor blocks one zombie hit before health is reduced.
+                        if (this.hasArmor) {
+                            this.hasArmor = false;
+                            this.player.clearTint();
+                            this.showPickupMessage('Armor absorbed hit');
+                            this.lastHitTime = time + this.hitCooldown;
+                            continue;
+                        }
+
                         // Tank zombies are still dangerous, but they do not kill instantly anymore.
                         // This gives the player a fair chance to recover instead of losing from one touch.
                         if (zombie.isTankZombie) {
@@ -1084,6 +1303,30 @@ export default class GameScene extends Phaser.Scene {
         }
     }
 
+    // Spitter zombie ranged attack.
+    // Creates a slow red projectile that travels toward the player.
+    shootSpit(zombie) {
+        const dx = this.player.x - zombie.x;
+        const dy = this.player.y - zombie.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance <= 0) {
+            return;
+        }
+
+        const directionX = dx / distance;
+        const directionY = dy / distance;
+        const spitSpeed = 120;
+
+        const spit = this.add.circle(zombie.x, zombie.y, 6, 0xff3333, 0.95);
+        spit.setStrokeStyle(1, 0x000000);
+        spit.setDepth(13);
+        spit.velocityX = directionX * spitSpeed;
+        spit.velocityY = directionY * spitSpeed;
+
+        this.enemyProjectiles.push(spit);
+    }
+
     // Create and fire a bullet toward the mouse cursor
     shootBullet() {
         // Get the current mouse position in world space so aiming still works with camera scrolling
@@ -1140,7 +1383,7 @@ export default class GameScene extends Phaser.Scene {
         this.bullets.push(bullet);
     }
 
-    // Create a zombie at the given position, with option for type (normal, tank, runner, brute)
+    // Create a zombie at the given position, with option for type (normal, tank, runner, spitter)
     spawnZombieAt(spawnX, spawnY, zombieType = 'normal') {
         let zombie;
 
@@ -1159,6 +1402,7 @@ export default class GameScene extends Phaser.Scene {
         let scoreValue = 50;
         let zombieScale = 0.9;
         let isTankZombie = false;
+        let isSpitter = false;
 
         // Tank zombie: slower, tougher, and worth more points.
         if (zombieType === 'tank') {
@@ -1180,15 +1424,16 @@ export default class GameScene extends Phaser.Scene {
             zombieScale = 0.82;
         }
 
-        // Brute zombie: stronger level 3 style enemy.
-        if (zombieType === 'brute') {
+        // Spitter zombie: Level 3 enemy that attacks from range.
+        // It is not as tanky as the tank zombie, but it forces the player to keep moving.
+        if (zombieType === 'spitter') {
             zombieKey = 'zombie_walk4';
             zombieAnim = 'zombie4_walk';
-            baseHealth = 7;
-            baseSpeed = 55;
-            scoreValue = 150;
-            zombieScale = 0.95;
-            isTankZombie = true;
+            baseHealth = 3;
+            baseSpeed = 45;
+            scoreValue = 120;
+            zombieScale = 0.88;
+            isSpitter = true;
         }
 
         zombie = this.add.sprite(spawnX, spawnY, zombieKey);
@@ -1199,6 +1444,10 @@ export default class GameScene extends Phaser.Scene {
         zombie.speed = baseSpeed * this.zombieSpeedMultiplier;
         zombie.scoreValue = scoreValue;
         zombie.isTankZombie = isTankZombie;
+        zombie.isSpitter = isSpitter;
+        zombie.lastSpitTime = 0;
+        zombie.spitCooldown = 3000;
+        zombie.preferredDistance = 220;
 
         // Anti-stuck values to help zombies move around obstacles
         zombie.stuckTime = 0;
@@ -1229,6 +1478,47 @@ export default class GameScene extends Phaser.Scene {
 
         // Store the zombie so it can be updated later
         this.zombies.push(zombie);
+    }
+
+    // Fire a shotgun spread using several pellets.
+    // This gives the player a short-range burst weapon for crowded areas.
+    shootShotgun() {
+        const mouseX = this.mouseWorldX;
+        const mouseY = this.mouseWorldY;
+
+        if (mouseX < this.player.x) {
+            this.player.setFlipX(true);
+        } else if (mouseX > this.player.x) {
+            this.player.setFlipX(false);
+        }
+
+        const dx = mouseX - this.player.x;
+        const dy = mouseY - this.player.y;
+        const baseAngle = Math.atan2(dy, dx);
+        const pelletAngles = [-0.28, -0.14, 0, 0.14, 0.28];
+
+        for (let i = 0; i < pelletAngles.length; i++) {
+            const angle = baseAngle + pelletAngles[i];
+            const directionX = Math.cos(angle);
+            const directionY = Math.sin(angle);
+
+            const pellet = this.add.rectangle(
+                this.player.x + directionX * 30,
+                this.player.y + 2 + directionY * 30,
+                7,
+                2,
+                0xffcc66
+            );
+
+            pellet.setStrokeStyle(1, 0x000000);
+            pellet.setAlpha(0.9);
+            pellet.setDepth(12);
+            pellet.velocityX = directionX * (this.bulletSpeed * 0.9);
+            pellet.velocityY = directionY * (this.bulletSpeed * 0.9);
+            pellet.rotation = angle;
+
+            this.bullets.push(pellet);
+        }
     }
 
     // Place zombies in different areas of the level based on section name
@@ -1269,6 +1559,15 @@ export default class GameScene extends Phaser.Scene {
                 this.spawnZombieAt(1780, 280, false);
                 this.spawnZombieAt(1880, 190, 'runner');
             }
+
+            // Level 3 corridor adds early runner and spitter pressure.
+            if (this.currentLevel === 3) {
+                this.spawnZombieAt(1680, 130, 'runner');
+                this.spawnZombieAt(1820, 280, false);
+                this.spawnZombieAt(1980, 170, 'spitter');
+                this.spawnZombieAt(2180, 260, 'runner');
+                this.spawnZombieAt(2350, 140, true);
+            }
         }
 
         if (sectionName === 'testchamber') {
@@ -1291,6 +1590,21 @@ export default class GameScene extends Phaser.Scene {
                 this.spawnZombieAt(2680, 280, false);
                 this.spawnZombieAt(2820, 180, true);
                 this.spawnZombieAt(2950, 240, 'runner');
+            }
+
+            // Level 3 terminal zones are defended by mixed enemy types.
+            if (this.currentLevel === 3) {
+                this.spawnZombieAt(2720, 140, 'runner');
+                this.spawnZombieAt(2880, 285, 'spitter');
+                this.spawnZombieAt(3060, 135, false);
+                this.spawnZombieAt(3220, 275, 'runner');
+                this.spawnZombieAt(3380, 170, true);
+
+                this.spawnZombieAt(3920, 135, 'spitter');
+                this.spawnZombieAt(4080, 285, 'runner');
+                this.spawnZombieAt(4250, 160, false);
+                this.spawnZombieAt(4420, 275, 'spitter');
+                this.spawnZombieAt(4560, 180, true);
             }
         }
 
@@ -1319,6 +1633,86 @@ export default class GameScene extends Phaser.Scene {
                 this.spawnZombieAt(4200, 180, true);
                 this.spawnZombieAt(4300, 280, 'runner');
             }
+
+            // Level 3 final route uses all enemy types so the ending stays active.
+            if (this.currentLevel === 3) {
+                this.spawnZombieAt(4850, 150, 'runner');
+                this.spawnZombieAt(5000, 285, false);
+                this.spawnZombieAt(5150, 170, 'spitter');
+                this.spawnZombieAt(5320, 260, 'runner');
+                this.spawnZombieAt(5480, 145, true);
+                this.spawnZombieAt(5620, 285, 'spitter');
+                this.spawnZombieAt(5750, 180, 'runner');
+            }
+        }
+    }
+
+    // Level 3 terminal objective management
+    updateTerminalObjective(delta) {
+        if (!this.terminalA || !this.terminalB) return;
+
+        const terminalABox = new Phaser.Geom.Rectangle(
+            this.terminalA.x - 45,
+            this.terminalA.y - 45,
+            90,
+            90
+        );
+
+        const terminalBBox = new Phaser.Geom.Rectangle(
+            this.terminalB.x - 45,
+            this.terminalB.y - 45,
+            90,
+            90
+        );
+
+        if (!this.terminalAActivated && Phaser.Geom.Intersects.RectangleToRectangle(this.player.getBounds(), terminalABox)) {
+            this.terminalAProgress += delta;
+
+            // Spawn a small defense wave when Terminal A upload starts.
+            if (!this.terminalASpawnedDefense) {
+                this.terminalASpawnedDefense = true;
+                this.spawnZombieAt(this.terminalA.x - 420, this.terminalA.y - 110, 'runner');
+                this.spawnZombieAt(this.terminalA.x + 420, this.terminalA.y + 110, 'spitter');
+                this.spawnZombieAt(this.terminalA.x + 520, this.terminalA.y - 100, false);
+                this.showPickupMessage('Terminal A defense wave incoming');
+            }
+
+            const percentA = Math.min(100, Math.floor((this.terminalAProgress / this.terminalHoldRequired) * 100));
+            this.showPickupMessage('Uploading Terminal A... ' + percentA + '%');
+
+            if (this.terminalAProgress >= this.terminalHoldRequired) {
+                this.terminalAActivated = true;
+                this.terminalA.setFillStyle(0x00ff88);
+                this.showPickupMessage('Terminal A activated');
+            }
+        }
+
+        if (!this.terminalBActivated && Phaser.Geom.Intersects.RectangleToRectangle(this.player.getBounds(), terminalBBox)) {
+            this.terminalBProgress += delta;
+
+            // Spawn a stronger defense wave when Terminal B upload starts.
+            if (!this.terminalBSpawnedDefense) {
+                this.terminalBSpawnedDefense = true;
+                this.spawnZombieAt(this.terminalB.x - 470, this.terminalB.y + 110, 'runner');
+                this.spawnZombieAt(this.terminalB.x + 420, this.terminalB.y - 110, 'spitter');
+                this.spawnZombieAt(this.terminalB.x + 520, this.terminalB.y + 100, true);
+                this.spawnZombieAt(this.terminalB.x - 570, this.terminalB.y - 100, false);
+                this.showPickupMessage('Terminal B defense wave incoming');
+            }
+
+            const percentB = Math.min(100, Math.floor((this.terminalBProgress / this.terminalHoldRequired) * 100));
+            this.showPickupMessage('Uploading Terminal B... ' + percentB + '%');
+
+            if (this.terminalBProgress >= this.terminalHoldRequired) {
+                this.terminalBActivated = true;
+                this.terminalB.setFillStyle(0x00ff88);
+                this.showPickupMessage('Terminal B activated');
+            }
+        }
+
+        if (!this.level3ExitUnlocked && this.terminalAActivated && this.terminalBActivated) {
+            this.level3ExitUnlocked = true;
+            this.showPickupMessage('Both terminals active\nExit unlocked');
         }
     }
 
@@ -1343,8 +1737,13 @@ export default class GameScene extends Phaser.Scene {
             this.aimMarker.clear();
         }
 
+        for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
+            this.enemyProjectiles[i].destroy();
+        }
+        this.enemyProjectiles = [];
+
         this.gameOverText.setVisible(true);
-        this.gameOverText.setText('GAME OVER\nPress R to Restart\nPress H for Home');
+        this.gameOverText.setText('GAME OVER\nPress R to Restart\nPress H for Menu');
         this.gameOverText.setPosition(this.scale.width / 2, 200);
         this.gameOverText.setDepth(1000);
     }
@@ -1366,6 +1765,11 @@ export default class GameScene extends Phaser.Scene {
             this.aimMarker.clear();
         }
 
+        for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
+            this.enemyProjectiles[i].destroy();
+        }
+        this.enemyProjectiles = [];
+
         if (this.gameOverText) {
             this.gameOverText.setVisible(false);
         }
@@ -1375,11 +1779,18 @@ export default class GameScene extends Phaser.Scene {
             this.saveProgress();
         }
 
+        if (this.currentLevel === 2 && this.unlockedLevel < 3) {
+            this.unlockedLevel = 3;
+            this.saveProgress();
+        }
+
         // Set the win text when the player actually finishes the level
         if (this.currentLevel === 1) {
-            this.winText.setText('LEVEL 1 COMPLETE!\nPress N for Level 2\nPress R to Restart\nPress H for Home');
+            this.winText.setText('LEVEL 1 COMPLETE!\nPress N for Level 2\nPress R to Restart\nPress H for Menu');
+        } else if (this.currentLevel === 2) {
+            this.winText.setText('LEVEL 2 COMPLETE!\nPress N for Level 3\nPress R to Restart\nPress H for Menu');
         } else {
-            this.winText.setText('YOU ESCAPED!\nPress R to Restart\nPress H for Home');
+            this.winText.setText('YOU ESCAPED!\nPress R to Restart\nPress H for Menu');
         }
 
         this.winText.setVisible(true);
@@ -1467,6 +1878,109 @@ export default class GameScene extends Phaser.Scene {
         this.showPickupMessage('Rank progress reset\nBack to Rank 1');
     }
 
+    // Creates randomized non-AR pickups for Level 2 and Level 3.
+    // The AR always stays guaranteed, but these pickups change each run.
+    spawnRandomPickupsForLevel() {
+        let pickupSpots = [];
+
+        if (this.currentLevel === 2) {
+            pickupSpots = [
+                { x: 3150, y: 115 },
+                { x: 3500, y: 285 },
+                { x: 4050, y: 110 },
+                { x: 4550, y: 280 }
+            ];
+        } else if (this.currentLevel === 3) {
+            pickupSpots = [
+                { x: 2600, y: 115 },
+                { x: 3650, y: 280 },
+                { x: 4700, y: 200 },
+                { x: 5450, y: 115 }
+            ];
+        }
+
+        const pickupTypes = ['health', 'damage', 'shotgun', 'armor'];
+
+        for (let i = 0; i < pickupSpots.length; i++) {
+            // 70 percent chance that a pickup appears at this spot.
+            if (Phaser.Math.Between(1, 100) <= 70) {
+                const randomType = Phaser.Utils.Array.GetRandom(pickupTypes);
+                this.createRandomPickup(pickupSpots[i].x, pickupSpots[i].y, randomType);
+            }
+        }
+    }
+
+    // Creates one random pickup image at the selected location.
+    createRandomPickup(x, y, pickupType) {
+        let pickup;
+
+        if (pickupType === 'health') {
+            pickup = this.add.image(x, y, 'hearts', this.heartFullFrame);
+            pickup.setScale(2.1);
+        } else if (pickupType === 'damage') {
+            pickup = this.add.image(x, y, 'damageBoostPickup');
+            pickup.setScale(0.02);
+            pickup.setAngle(20);
+        } else if (pickupType === 'shotgun') {
+            pickup = this.add.image(x, y, 'shotgunPickup');
+            pickup.setScale(0.01);
+            pickup.setAngle(-12);
+        } else if (pickupType === 'armor') {
+            pickup = this.add.image(x, y, 'armorPickup');
+            pickup.setScale(0.02);
+        }
+
+        if (!pickup) {
+            return;
+        }
+
+        pickup.pickupType = pickupType;
+        pickup.setDepth(10);
+
+        this.tweens.add({
+            targets: pickup,
+            y: y - 8,
+            duration: 850,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+        });
+
+        this.randomPickups.push(pickup);
+    }
+
+    // Applies the effect when the player collects a randomized pickup.
+    collectRandomPickup(pickup) {
+        if (pickup.pickupType === 'health') {
+            this.playerHealth += 35;
+
+            if (this.playerHealth > 105) {
+                this.playerHealth = 105;
+            }
+
+            this.showPickupMessage('Health Restored');
+        } else if (pickup.pickupType === 'damage') {
+            this.bulletDamage = this.baseBulletDamage + 1;
+            this.damageBoostTimer = 6000;
+            this.showPickupMessage('Boost On');
+        } else if (pickup.pickupType === 'shotgun') {
+            if (this.currentWeapon !== 'shotgun') {
+                this.previousWeaponBeforeShotgun = this.currentWeapon;
+            }
+
+            this.currentWeapon = 'shotgun';
+            this.shotgunTimer = 12000;
+            this.showPickupMessage('Shotgun Equipped\nSpread shots for 12 seconds');
+        } else if (pickup.pickupType === 'armor') {
+            this.hasArmor = true;
+            this.playerHitTimer = 0;
+            this.player.setTint(0xaaddff);
+            this.showPickupMessage('Armor Equipped\nBlocks next hit');
+        }
+
+        pickup.destroy();
+    }
+
     // Display a temporary message in the middle of the screen for pickups/status
     showPickupMessage(message) {
         this.pickupText.setText(message);
@@ -1478,3 +1992,4 @@ export default class GameScene extends Phaser.Scene {
         this.pickupMessageTimer = 2000;
     }
 }
+
