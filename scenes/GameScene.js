@@ -1,6 +1,7 @@
 import createLevel1 from '../levels/level1.js';
 import createLevel2 from '../levels/level2.js';
 import createLevel3 from '../levels/level3.js';
+import { createSurvivalArena } from '../levels/survivalArena.js';
 export default class GameScene extends Phaser.Scene {
 
     // Basic setup for the game scene
@@ -10,6 +11,10 @@ export default class GameScene extends Phaser.Scene {
 
     init(data) {
         data = data || {};
+
+        // Story mode uses levels.
+        // Survival mode uses one arena and endless waves.
+        this.currentMode = data.mode || 'story';
         this.currentLevel = data.level || 1;
     }
 
@@ -71,7 +76,10 @@ export default class GameScene extends Phaser.Scene {
         this.player.body.setSize(20, 14);
         this.player.body.setOffset(54, 90);
 
-        if (this.currentLevel === 3) {
+        if (this.currentMode === 'survival') {
+            // survival arena is 3600 wide, so the world bound needs to match it.
+            this.levelWidth = 3600;
+        } else if (this.currentLevel === 3) {
             this.levelWidth = 6000;
         } else if (this.currentLevel === 2) {
             this.levelWidth = 5000;
@@ -115,12 +123,19 @@ export default class GameScene extends Phaser.Scene {
         this.playerSpeed = 150;
 
         // Build the current level layout using the separate Level 1 file
-        if (this.currentLevel === 3) {
+        if (this.currentMode === 'survival') {
+            createSurvivalArena(this);
+        } else if (this.currentLevel === 3) {
             createLevel3(this);
         } else if (this.currentLevel === 2) {
             createLevel2(this);
         } else {
             createLevel1(this);
+        }
+
+        // Survival starts the player near the middle of the arena.
+        if (this.currentMode === 'survival') {
+            this.player.setPosition(this.playerStartX || 1800, this.playerStartY || 200);
         }
         
         // Let the player collide with the level walls and obstacles from Level 1.
@@ -210,13 +225,17 @@ export default class GameScene extends Phaser.Scene {
         this.bulletDamage = this.baseBulletDamage;
         this.unlockedLevel = this.unlockedLevel || 1;
 
-        // Place all zombies after rank/difficulty values are set.
-        // This matters because zombie health and speed now use the rank multipliers.
-        this.spawnWave('entrance');
-        this.spawnWave('armory');
-        this.spawnWave('corridor');
-        this.spawnWave('testchamber');
-        this.spawnWave('final');
+        // Place zombies after rank/difficulty values are set.
+        // Story mode uses fixed enemy placement. Survival mode starts waves after the briefing.
+        if (this.currentMode === 'survival') {
+            this.setupSurvivalMode();
+        } else {
+            this.spawnWave('entrance');
+            this.spawnWave('armory');
+            this.spawnWave('corridor');
+            this.spawnWave('testchamber');
+            this.spawnWave('final');
+        }
 
         // Level 3 objective setup.
         // The player must hold both terminal areas before the exit unlocks.
@@ -238,7 +257,9 @@ export default class GameScene extends Phaser.Scene {
         const startingPointsNeeded = this.nextRankScore - this.score;
         let startingHudText = 'Score: 0 | Rank: ' + this.playerRank + ' | Need: ' + startingPointsNeeded;
 
-        if (this.playerRank >= this.maxRank) {
+        if (this.currentMode === 'survival') {
+            startingHudText = 'Wave: 0 | Score: 0 | Rank: ' + this.playerRank;
+        } else if (this.playerRank >= this.maxRank) {
             startingHudText = 'Score: 0 | Rank: MAX';
         }
 
@@ -512,7 +533,9 @@ export default class GameScene extends Phaser.Scene {
 
         let briefingTitle = 'LEVEL 1 BRIEFING';
 
-        if (this.currentLevel === 2) {
+        if (this.currentMode === 'survival') {
+            briefingTitle = 'SURVIVAL MODE';
+        } else if (this.currentLevel === 2) {
             briefingTitle = 'LEVEL 2 BRIEFING';
         } else if (this.currentLevel === 3) {
             briefingTitle = 'LEVEL 3 BRIEFING';
@@ -559,6 +582,15 @@ export default class GameScene extends Phaser.Scene {
                 'Press ENTER when you are ready.';
         }
 
+        if (this.currentMode === 'survival') {
+            briefingText =
+                'Goal: survive as many waves as possible.\n\n' +
+                'Zombies get stronger and more numerous each wave.\n' +
+                'Random pickups may appear between waves.\n\n' +
+                'Enemy types unlock over time: runners, tanks, and spitters.\n\n' +
+                'Press ENTER when you are ready.';
+        }
+
         this.levelIntroText = this.add.text(
             this.scale.width / 2,
             this.scale.height / 2 + 8,
@@ -597,7 +629,11 @@ export default class GameScene extends Phaser.Scene {
                     this.deathEvent.remove(false);
                     this.deathEvent = null;
                 }
-                this.scene.restart({ level: this.currentLevel });
+                if (this.currentMode === 'survival') {
+                    this.scene.restart({ mode: 'survival' });
+                } else {
+                    this.scene.restart({ level: this.currentLevel });
+                }
             }
 
             if (Phaser.Input.Keyboard.JustDown(this.homeKey)) {
@@ -623,6 +659,12 @@ export default class GameScene extends Phaser.Scene {
                 this.levelIntroBox.setVisible(false);
                 this.levelIntroTitle.setVisible(false);
                 this.levelIntroText.setVisible(false);
+
+                // Survival waves only start after the player closes the briefing.
+                if (this.currentMode === 'survival' && !this.survivalStarted) {
+                    this.survivalStarted = true;
+                    this.startNextSurvivalWave();
+                }
             }
             return;
         }
@@ -636,7 +678,11 @@ export default class GameScene extends Phaser.Scene {
             if (this.isPaused) {
                 // Allow restarting from the pause menu
                 if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
-                    this.scene.restart({ level: this.currentLevel });
+                    if (this.currentMode === 'survival') {
+                        this.scene.restart({ mode: 'survival' });
+                    } else {
+                        this.scene.restart({ level: this.currentLevel });
+                    }
                 }
 
                 // Allow quitting to main menu while paused
@@ -950,7 +996,9 @@ export default class GameScene extends Phaser.Scene {
 
         // Show score, current rank, and how many more points are needed for the next rank.
         const pointsNeeded = this.nextRankScore - this.score;
-        if (this.playerRank < this.maxRank) {
+        if (this.currentMode === 'survival') {
+            this.uiText.setText('Wave: ' + this.survivalWave + ' | Score: ' + this.score + ' | Rank: ' + this.playerRank);
+        } else if (this.playerRank < this.maxRank) {
             this.uiText.setText(
                 'Score: ' + this.score +
                 ' | Rank: ' + this.playerRank +
@@ -1063,6 +1111,11 @@ export default class GameScene extends Phaser.Scene {
             }
         }
 
+        // Survival checks if the wave is cleared and starts the next wave.
+        if (this.currentMode === 'survival') {
+            this.updateSurvivalMode(delta);
+        }
+
         // Check if the player activates the Level 2 power switch.
         // The Level 2 exit stays locked until the power is restored.
         if (this.powerSwitch && !this.powerRestored) {
@@ -1087,8 +1140,8 @@ export default class GameScene extends Phaser.Scene {
             }
         }
 
-        // Level 3 terminal objective
-        if (this.currentLevel === 3) {
+        // Level 3 terminal objective only applies to story mode.
+        if (this.currentMode !== 'survival' && this.currentLevel === 3) {
             this.updateTerminalObjective(delta);
         }
 
@@ -1478,6 +1531,9 @@ export default class GameScene extends Phaser.Scene {
 
         // Store the zombie so it can be updated later
         this.zombies.push(zombie);
+
+        // Return the zombie so other systems, like Survival Mode, can change its behavior after spawning.
+        return zombie;
     }
 
     // Fire a shotgun spread using several pellets.
@@ -1647,6 +1703,127 @@ export default class GameScene extends Phaser.Scene {
         }
     }
 
+    // Sets up Survival Mode wave values.
+    setupSurvivalMode() {
+        this.survivalWave = 0;
+        this.survivalStarted = false;
+        this.survivalWaveActive = false;
+        this.survivalNextWaveTimer = 0;
+        this.survivalWaitingForStartZone = false;
+        this.survivalStartZoneWidth = 95;
+        this.survivalStartZoneHeight = 55;
+        this.survivalARSpawned = false;
+    }
+
+    // Starts the next Survival Mode wave.
+    startNextSurvivalWave() {
+        this.survivalWave++;
+        this.survivalWaveActive = true;
+        this.survivalNextWaveTimer = 0;
+
+        this.showPickupMessage('Wave ' + this.survivalWave + ' incoming');
+        this.spawnSurvivalWave();
+        this.spawnSurvivalPickupReward();
+
+        // The AK appears as a survival reward after a few waves.
+        if (this.survivalWave === 3 && !this.survivalARSpawned && !this.arPickup && this.currentWeapon !== 'ar') {
+            this.survivalARSpawned = true;
+            this.arPickup = this.add.image(1600, 105, 'akPickup');
+            this.arPickup.setScale(0.02);
+            this.arPickup.setDepth(10);
+            this.arPickup.setAngle(-15);
+            this.showPickupMessage('AK dropped in the arena');
+        }
+    }
+
+    // Spawns enemies for the current Survival Mode wave.
+    spawnSurvivalWave() {
+        // Spawn away from the start zone so new waves do not feel unfair.
+        const spawnPoints = [
+            { x: 250, y: 90 },
+            { x: 250, y: 300 },
+            { x: 3350, y: 90 },
+            { x: 3350, y: 300 },
+            { x: 900, y: 70 },
+            { x: 2700, y: 330 }
+        ];
+
+        // Increase survival pressure so early waves feel more active.
+        // The zombie count scales faster now to keep the arena intense.
+        const zombieCount = 6 + (this.survivalWave * 4);
+
+        for (let i = 0; i < zombieCount; i++) {
+            const spawnPoint = Phaser.Utils.Array.GetRandom(spawnPoints);
+            let zombieType = 'normal';
+
+            if (this.survivalWave >= 7 && Phaser.Math.Between(1, 100) <= 25) {
+                zombieType = 'spitter';
+            } else if (this.survivalWave >= 5 && Phaser.Math.Between(1, 100) <= 25) {
+                zombieType = 'tank';
+            } else if (this.survivalWave >= 3 && Phaser.Math.Between(1, 100) <= 40) {
+                zombieType = 'runner';
+            }
+
+            const zombie = this.spawnZombieAt(spawnPoint.x, spawnPoint.y, zombieType);
+
+            // Survival enemies should chase right away so the player does not have to search the map for them.
+            if (zombie) {
+                zombie.activeChase = true;
+            }
+        }
+    }
+
+    // Spawns a random pickup reward during Survival Mode.
+    spawnSurvivalPickupReward() {
+        const pickupChance = Math.min(90, 35 + (this.survivalWave * 8));
+
+        if (Phaser.Math.Between(1, 100) > pickupChance) {
+            return;
+        }
+
+        const pickupSpots = [
+            { x: 1200, y: 125 },
+            { x: 2000, y: 125 },
+            { x: 1200, y: 275 },
+            { x: 2000, y: 275 },
+            { x: 1600, y: 200 }
+        ];
+
+        const pickupTypes = ['health', 'damage', 'shotgun', 'armor'];
+        const spot = Phaser.Utils.Array.GetRandom(pickupSpots);
+        const type = Phaser.Utils.Array.GetRandom(pickupTypes);
+
+        this.createRandomPickup(spot.x, spot.y, type);
+    }
+
+    // Checks if the current Survival Mode wave is cleared.
+    // After each wave, the player must return to the green start zone before the next wave begins.
+    updateSurvivalMode(delta) {
+        if (!this.survivalStarted) {
+            return;
+        }
+
+        if (this.survivalWaveActive && this.zombies.length === 0) {
+            this.survivalWaveActive = false;
+            this.survivalWaitingForStartZone = true;
+            this.showPickupMessage('Wave ' + this.survivalWave + ' cleared\nReturn to start zone');
+        }
+
+        if (!this.survivalWaveActive && this.survivalWaitingForStartZone) {
+            const startX = this.playerStartX || 1800;
+            const startY = (this.playerStartY || 200) - 22;
+
+            const insideSafeZone =
+                Math.abs(this.player.x - startX) <= this.survivalStartZoneWidth &&
+                Math.abs(this.player.y - startY) <= this.survivalStartZoneHeight;
+
+            if (insideSafeZone) {
+                this.survivalWaitingForStartZone = false;
+                this.startNextSurvivalWave();
+            }
+        }
+    }
+
     // Level 3 terminal objective management
     updateTerminalObjective(delta) {
         if (!this.terminalA || !this.terminalB) return;
@@ -1743,7 +1920,20 @@ export default class GameScene extends Phaser.Scene {
         this.enemyProjectiles = [];
 
         this.gameOverText.setVisible(true);
-        this.gameOverText.setText('GAME OVER\nPress R to Restart\nPress H for Menu');
+        if (this.currentMode === 'survival') {
+            // Save the best Survival Mode result so the Mode Select screen can show it later.
+            this.saveSurvivalStats();
+
+            this.gameOverText.setText(
+                'SURVIVAL OVER\n' +
+                'Wave Reached: ' + this.survivalWave + '\n' +
+                'Score: ' + this.score + '\n' +
+                'Press R to Restart\n' +
+                'Press H for Menu'
+            );
+        } else {
+            this.gameOverText.setText('GAME OVER\nPress R to Restart\nPress H for Menu');
+        }
         this.gameOverText.setPosition(this.scale.width / 2, 200);
         this.gameOverText.setDepth(1000);
     }
@@ -1841,6 +2031,35 @@ export default class GameScene extends Phaser.Scene {
         };
 
         localStorage.setItem('subjectZeroProgress', JSON.stringify(progress));
+    }
+
+    // Saves the player's best Survival Mode wave and score.
+    // This is shown later on the Mode Select screen.
+    saveSurvivalStats() {
+        const savedStats = localStorage.getItem('subjectZeroSurvivalStats');
+        let bestWave = 0;
+        let bestScore = 0;
+
+        if (savedStats) {
+            const stats = JSON.parse(savedStats);
+            bestWave = stats.bestWave || 0;
+            bestScore = stats.bestScore || 0;
+        }
+
+        if (this.survivalWave > bestWave) {
+            bestWave = this.survivalWave;
+        }
+
+        if (this.score > bestScore) {
+            bestScore = this.score;
+        }
+
+        const newStats = {
+            bestWave: bestWave,
+            bestScore: bestScore
+        };
+
+        localStorage.setItem('subjectZeroSurvivalStats', JSON.stringify(newStats));
     }
 
     // Loads saved rank progress from the browser if it exists.

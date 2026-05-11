@@ -39,13 +39,23 @@ export default class ModeSelectScene extends Phaser.Scene {
         // Load saved progress from localStorage.
         // If there is no saved progress yet, the player starts at Rank 1 and only Level 1 is unlocked.
         const savedProgress = localStorage.getItem('subjectZeroProgress');
+        const savedSurvivalStats = localStorage.getItem('subjectZeroSurvivalStats');
         let playerRank = 1;
         let unlockedLevel = 1;
+        let bestSurvivalWave = 0;
+        let bestSurvivalScore = 0;
 
         if (savedProgress) {
             const progress = JSON.parse(savedProgress);
             playerRank = progress.playerRank || 1;
             unlockedLevel = progress.unlockedLevel || 1;
+        }
+
+        // Load best Survival Mode results if the player has played survival before.
+        if (savedSurvivalStats) {
+            const survivalStats = JSON.parse(savedSurvivalStats);
+            bestSurvivalWave = survivalStats.bestWave || 0;
+            bestSurvivalScore = survivalStats.bestScore || 0;
         }
 
         // Main title
@@ -73,8 +83,20 @@ export default class ModeSelectScene extends Phaser.Scene {
             }
         ).setOrigin(0.5);
 
+        // Survival Mode best results.
+        this.add.text(
+            this.scale.width / 2,
+            205,
+            'Best Survival Wave: ' + bestSurvivalWave + ' | Best Score: ' + bestSurvivalScore,
+            {
+                fontSize: '18px',
+                fill: '#cccccc',
+                align: 'center'
+            }
+        ).setOrigin(0.5);
+
         // Level 1 is always playable.
-        const level1Button = this.add.text(this.scale.width / 2, 270, 'PLAY LEVEL 1', {
+        const level1Button = this.add.text(this.scale.width / 2, 285, 'PLAY LEVEL 1', {
             fontSize: '28px',
             fill: '#00ff88',
             backgroundColor: '#1f2a36',
@@ -89,7 +111,7 @@ export default class ModeSelectScene extends Phaser.Scene {
         const level2Text = unlockedLevel >= 2 ? 'PLAY LEVEL 2' : 'LEVEL 2 LOCKED';
         const level2Color = unlockedLevel >= 2 ? '#00ff88' : '#777777';
 
-        const level2Button = this.add.text(this.scale.width / 2, 335, level2Text, {
+        const level2Button = this.add.text(this.scale.width / 2, 350, level2Text, {
             fontSize: '28px',
             fill: level2Color,
             backgroundColor: '#1f2a36',
@@ -107,7 +129,7 @@ export default class ModeSelectScene extends Phaser.Scene {
         const level3Text = unlockedLevel >= 3 ? 'PLAY LEVEL 3' : 'LEVEL 3 LOCKED';
         const level3Color = unlockedLevel >= 3 ? '#00ff88' : '#777777';
 
-        const level3Button = this.add.text(this.scale.width / 2, 400, level3Text, {
+        const level3Button = this.add.text(this.scale.width / 2, 415, level3Text, {
             fontSize: '28px',
             fill: level3Color,
             backgroundColor: '#1f2a36',
@@ -122,7 +144,7 @@ export default class ModeSelectScene extends Phaser.Scene {
         }
 
         // Info buttons explain pickups and rank benefits without crowding the menu.
-        const pickupInfoButton = this.add.text(this.scale.width / 2 - 105, 465, 'PICKUPS', {
+        const pickupInfoButton = this.add.text(this.scale.width / 2 - 105, 480, 'PICKUPS', {
             fontSize: '22px',
             fill: '#ffffff',
             backgroundColor: '#263747',
@@ -133,7 +155,7 @@ export default class ModeSelectScene extends Phaser.Scene {
             this.showPickupInfo();
         });
 
-        const rankInfoButton = this.add.text(this.scale.width / 2 + 105, 465, 'RANK INFO', {
+        const rankInfoButton = this.add.text(this.scale.width / 2 + 105, 480, 'RANK INFO', {
             fontSize: '22px',
             fill: '#ffffff',
             backgroundColor: '#263747',
@@ -144,27 +166,31 @@ export default class ModeSelectScene extends Phaser.Scene {
             this.showRankInfo();
         });
 
-        // Survival mode is planned for later, so show it as locked for now.
-        this.add.text(this.scale.width / 2, 520, 'SURVIVAL MODE - COMING SOON', {
+        // Survival mode starts an endless wave arena.
+        const survivalButton = this.add.text(this.scale.width / 2, 535, 'PLAY SURVIVAL MODE', {
             fontSize: '24px',
-            fill: '#888888',
+            fill: '#00ff88',
             backgroundColor: '#1f2a36',
             padding: { x: 18, y: 10 }
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+        survivalButton.on('pointerdown', () => {
+            this.scene.start('GameScene', { mode: 'survival' });
+        });
 
         this.add.text(
             this.scale.width / 2,
-            575,
-            'Story Mode: complete levels to unlock the next sector.\nSurvival Mode will be added later as an endless wave mode.',
+            585,
+            'Story Mode unlocks levels. Survival Mode tests how long you can last.',
             {
-                fontSize: '18px',
+                fontSize: '15px',
                 fill: '#cccccc',
                 align: 'center'
             }
         ).setOrigin(0.5);
 
         // Back button returns to the landing screen.
-        const backButton = this.add.text(this.scale.width / 2, 635, 'BACK', {
+        const backButton = this.add.text(this.scale.width / 2, 620, 'BACK', {
             fontSize: '22px',
             fill: '#ffffff',
             backgroundColor: '#333333',
