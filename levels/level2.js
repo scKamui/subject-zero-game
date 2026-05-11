@@ -64,57 +64,161 @@ export default function createLevel2(scene) {
         return object;
     };
 
+    // Creates stacked supply crates.
+    const createCrateStack = (x, y, width = 120, height = 70) => {
+        createSolidObject(x, y, width, height, 0x35414d, -1);
+
+        scene.add.rectangle(x - 32, y - 10, 44, 34, 0x8b5a2b).setStrokeStyle(2, 0x2a1b0f).setDepth(3);
+        scene.add.rectangle(x + 16, y - 10, 44, 34, 0x9a6a35).setStrokeStyle(2, 0x2a1b0f).setDepth(3);
+        scene.add.rectangle(x - 8, y + 18, 54, 26, 0x6f4a28).setStrokeStyle(2, 0x2a1b0f).setDepth(3);
+
+        scene.add.rectangle(x - 32, y - 10, 3, 32, 0x2a1b0f).setDepth(4);
+        scene.add.rectangle(x + 16, y - 10, 3, 32, 0x2a1b0f).setDepth(4);
+        scene.add.rectangle(x - 8, y + 18, 52, 3, 0x2a1b0f).setDepth(4);
+    };
+
+    // Creates a barrel group.
+    const createBarrelCluster = (x, y, width = 120, height = 70) => {
+        createSolidObject(x, y, width, height, 0x35414d, -1);
+
+        const barrels = [
+            { x: x - 30, y: y - 2, color: 0x8f2d2d },
+            { x: x, y: y + 5, color: 0x2d5f8f },
+            { x: x + 30, y: y - 2, color: 0x6b6f75 }
+        ];
+
+        for (let i = 0; i < barrels.length; i++) {
+            const barrel = barrels[i];
+            scene.add.ellipse(barrel.x, barrel.y, 28, 40, barrel.color).setStrokeStyle(2, 0x111111).setDepth(3);
+            scene.add.rectangle(barrel.x, barrel.y - 8, 22, 3, 0x111111).setDepth(4);
+            scene.add.rectangle(barrel.x, barrel.y + 8, 22, 3, 0x111111).setDepth(4);
+        }
+    };
+
+    // Creates armory shelves and weapon storage.
+    const createArmoryRack = (x, y, width = 120, height = 60) => {
+        createSolidObject(x, y, width, height, 0x35414d, -1);
+
+        scene.add.rectangle(x, y, width - 12, height - 18, 0x27313a).setStrokeStyle(2, 0x91a1ad).setDepth(3);
+
+        for (let i = -36; i <= 36; i += 24) {
+            scene.add.rectangle(x + i, y - 8, 6, 24, 0x111111).setDepth(4);
+            scene.add.rectangle(x + i + 4, y + 8, 18, 4, 0x555555).setDepth(4);
+        }
+    };
+
+    // Creates broken wall barricades.
+    const createBrokenWall = (x, y, direction = 'vertical') => {
+        createSolidObject(x, y, 90, 90, 0x35414d, -1);
+
+        if (direction === 'vertical') {
+            scene.add.rectangle(x - 18, y, 22, 78, 0x707a86).setStrokeStyle(2, 0x1a1f26).setDepth(3);
+            scene.add.rectangle(x + 18, y - 12, 22, 55, 0x707a86).setStrokeStyle(2, 0x1a1f26).setDepth(3);
+            scene.add.rectangle(x + 20, y + 25, 34, 16, 0x4b5360).setStrokeStyle(2, 0x1a1f26).setDepth(3);
+        } else {
+            scene.add.rectangle(x, y - 20, 78, 22, 0x707a86).setStrokeStyle(2, 0x1a1f26).setDepth(3);
+            scene.add.rectangle(x - 12, y + 18, 55, 22, 0x707a86).setStrokeStyle(2, 0x1a1f26).setDepth(3);
+            scene.add.rectangle(x + 28, y + 18, 16, 34, 0x4b5360).setStrokeStyle(2, 0x1a1f26).setDepth(3);
+        }
+    };
+
+    // Creates metal pipe barriers.
+    const createPipeBarrier = (x, y, height = 120) => {
+        createSolidObject(x, y, 24, height, 0x35414d, -1);
+        scene.add.rectangle(x - 5, y, 8, height - 10, 0x707a86).setStrokeStyle(1, 0x1a1f26).setDepth(3);
+        scene.add.rectangle(x + 7, y, 8, height - 10, 0x9aa6b2).setStrokeStyle(1, 0x1a1f26).setDepth(3);
+        scene.add.circle(x + 1, y - ((height - 24) / 2), 8, 0x4b5360).setStrokeStyle(1, 0x1a1f26).setDepth(4);
+        scene.add.circle(x + 1, y + ((height - 24) / 2), 8, 0x4b5360).setStrokeStyle(1, 0x1a1f26).setDepth(4);
+    };
+
+    // Creates combat/test chamber equipment.
+    const createTestMachine = (x, y, width = 100, height = 90) => {
+        createSolidObject(x, y, width, height, 0x35414d, -1);
+        scene.add.rectangle(x, y, width - 16, height - 18, 0x1c222b).setStrokeStyle(3, 0x6f7f92).setDepth(3);
+        scene.add.rectangle(x, y - 10, width - 38, 26, 0x2d5f8f, 0.8).setStrokeStyle(2, 0x00ffcc).setDepth(4);
+        scene.add.circle(x - 28, y + 24, 6, 0xff3333).setDepth(4);
+        scene.add.circle(x + 28, y + 24, 6, 0xffdd33).setDepth(4);
+    };
+
+    // Creates generators/power units.
+    const createGeneratorUnit = (x, y, width = 120, height = 70) => {
+        createSolidObject(x, y, width, height, 0x35414d, -1);
+        scene.add.rectangle(x, y, width - 18, height - 18, 0x27313a).setStrokeStyle(2, 0x91a1ad).setDepth(3);
+        scene.add.rectangle(x - 24, y - 8, 28, 16, 0xffdd33).setStrokeStyle(1, 0x111111).setDepth(4);
+        scene.add.circle(x + 30, y - 10, 7, 0xff3333).setStrokeStyle(1, 0x111111).setDepth(4);
+        scene.add.rectangle(x + 18, y + 14, 42, 5, 0x111111).setDepth(4);
+        scene.add.rectangle(x + 18, y + 2, 42, 5, 0x111111).setDepth(4);
+    };
+
     // Top and bottom boundaries (extended for longer level)
     createSolidObject(2500, 18, 5000, 20, 0x8f99a6, -2);
     createSolidObject(2500, 372, 5000, 40, 0x8f99a6, -2);
 
     // Entrance area (more open for easier start)
-    createSolidObject(280, 140, 60, 60, 0x58616c, -1);
-    createSolidObject(430, 260, 60, 60, 0x58616c, -1);
+    createCrateStack(280, 140, 70, 70);
+    createBarrelCluster(430, 260, 70, 70);
 
     // Armory area (player gets AR here, more space to move)
-    createSolidObject(620, 120, 110, 50, 0x3f8fe6, -1);
-    createSolidObject(880, 120, 110, 50, 0x3f8fe6, -1);
-    createSolidObject(750, 250, 120, 70, 0x3f8fe6, -1);
-    createSolidObject(600, 310, 60, 60, 0x58616c, -1);
-    createSolidObject(900, 310, 60, 60, 0x58616c, -1);
+    createArmoryRack(620, 120, 110, 50);
+    createArmoryRack(880, 120, 110, 50);
+    createGeneratorUnit(750, 250, 120, 70);
+    createCrateStack(600, 310, 70, 70);
+    createBarrelCluster(900, 310, 70, 70);
 
     // Corridor area (narrow path where player has to move carefully)
-    createSolidObject(1100, 125, 20, 100, 0x707a86, -2);
-    createSolidObject(1240, 275, 20, 100, 0x707a86, -2);
-    createSolidObject(1380, 125, 20, 100, 0x707a86, -2);
-    createSolidObject(1520, 275, 20, 100, 0x707a86, -2);
-    createSolidObject(1660, 125, 20, 100, 0x707a86, -2);
+    createPipeBarrier(1100, 125, 100);
+    createPipeBarrier(1240, 275, 100);
+    createPipeBarrier(1380, 125, 100);
+    createPipeBarrier(1520, 275, 100);
+    createPipeBarrier(1660, 125, 100);
 
-    createSolidObject(1180, 210, 60, 60, 0x58616c, -1);
-    createSolidObject(1460, 210, 60, 60, 0x58616c, -1);
+    createBrokenWall(1180, 210, 'horizontal');
+    createBrokenWall(1460, 210, 'vertical');
 
     // Test chamber (main combat area)
-    createSolidObject(1850, 130, 90, 90, 0x3f8fe6, -1);
-    createSolidObject(2050, 280, 90, 90, 0x3f8fe6, -1);
-    createSolidObject(2250, 160, 90, 90, 0x3f8fe6, -1);
-    createSolidObject(2450, 280, 90, 90, 0x3f8fe6, -1);
+    createTestMachine(1850, 130, 90, 90);
+    createTestMachine(2050, 280, 90, 90);
+    createTestMachine(2250, 160, 90, 90);
+    createTestMachine(2450, 280, 90, 90);
 
-    createSolidObject(1950, 210, 70, 70, 0x58616c, -1);
-    createSolidObject(2350, 220, 70, 70, 0x58616c, -1);
+    createGeneratorUnit(1950, 210, 70, 70);
+    createGeneratorUnit(2350, 220, 70, 70);
 
     // Center cover to break up the space a bit
-    createSolidObject(2150, 200, 150, 30, 0x707a86, -2);
+    createPipeBarrier(2150, 200, 150);
 
     // Final area (hardest part before exit)
-    createSolidObject(2720, 130, 20, 110, 0x707a86, -2);
-    createSolidObject(2870, 270, 20, 110, 0x707a86, -2);
-    createSolidObject(3020, 130, 20, 110, 0x707a86, -2);
-    createSolidObject(3170, 270, 20, 110, 0x707a86, -2);
-    createSolidObject(3320, 130, 20, 110, 0x707a86, -2);
+    createPipeBarrier(2720, 130, 110);
+    createPipeBarrier(2870, 270, 110);
+    createPipeBarrier(3020, 130, 110);
+    createPipeBarrier(3170, 270, 110);
+    createPipeBarrier(3320, 130, 110);
 
-    createSolidObject(2800, 210, 120, 120, 0x3f8fe6, -1);
-    createSolidObject(3050, 120, 80, 80, 0x3f8fe6, -1);
-    createSolidObject(3250, 290, 80, 80, 0x3f8fe6, -1);
+    createTestMachine(2800, 210, 120, 120);
+    createGeneratorUnit(3050, 120, 80, 80);
+    createCrateStack(3250, 290, 80, 80);
 
-    createSolidObject(2930, 300, 70, 70, 0x58616c, -1);
-    createSolidObject(3160, 180, 70, 70, 0x58616c, -1);
-    createSolidObject(3380, 240, 70, 70, 0x58616c, -1);
+    createBrokenWall(2930, 300, 'horizontal');
+    createBrokenWall(3160, 180, 'vertical');
+    createBrokenWall(3380, 240, 'horizontal');
+
+    // Walls and obstacles after the power room so the last section is not empty.
+    // These objects use the extra width of Level 2 and make the ending feel like a final push.
+    createGeneratorUnit(3620, 120, 120, 70);
+    createCrateStack(3780, 290, 140, 70);
+    createTestMachine(3980, 185, 90, 130);
+    createArmoryRack(4140, 120, 140, 60);
+    createBarrelCluster(4350, 280, 140, 70);
+    createBrokenWall(4500, 125, 'horizontal');
+    createGeneratorUnit(4650, 280, 130, 65);
+
+    // Narrow wall before the exit to make the final approach feel more tense.
+    createPipeBarrier(4720, 200, 260);
+
+    // Power room obstacles around the switch objective.
+    createGeneratorUnit(3300, 150, 90, 50);
+    createArmoryRack(3500, 260, 100, 60);
+    createTestMachine(3380, 235, 80, 80);
 
     // Walls and obstacles after the power room so the last section is not empty.
     // These objects use the extra width of Level 2 and make the ending feel like a final push.
