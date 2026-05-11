@@ -903,13 +903,13 @@ export default class GameScene extends Phaser.Scene {
                 continue;
             }
 
-            // Use a much smaller hitbox for spit projectiles so they feel fairer.
-            // The player now has to be hit more directly instead of taking splash-like damage.
+            // Use a taller body hitbox for spit projectiles.
+            // The hitbox reaches lower so spit also registers on the player's legs.
             const playerSpitHitbox = new Phaser.Geom.Rectangle(
-                this.player.x - 10,
-                this.player.y - 12,
-                20,
-                24
+                this.player.x - 16,
+                this.player.y - 26,
+                32,
+                66
             );
 
             if (Phaser.Geom.Intersects.RectangleToRectangle(spit.getBounds(), playerSpitHitbox)) {
